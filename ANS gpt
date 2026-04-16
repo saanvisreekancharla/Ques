@@ -1,0 +1,379 @@
+End-to-End CI/CD for a Web Application using Jenkins, Docker, and Kubernetes
+
+This answer is structured exactly to match your question:
+
+Develop in VS Code
+Push to GitHub
+Modify and commit updates
+Jenkins Pipeline for CI/CD
+GitHub Checkout
+Docker image build
+Push to Docker Hub
+Kubernetes cluster creation
+Deploy app and access via NodePort
+Attach student degree certificate separately
+1. Project Overview
+
+We will automate deployment of a simple Node.js web application using:
+
+Visual Studio Code
+GitHub
+Jenkins
+Docker
+Kubernetes
+Docker Hub
+
+
+
+2. Folder Structure
+
+Create project folder:
+
+webapp-ci-cd/
+│
+├── app.js
+├── package.json
+├── Dockerfile
+├── Jenkinsfile
+├── deployment.yaml
+├── service.yaml
+└── README.md
+
+
+
+
+3. Step 1 – Create Web Application in VS Code
+app.js
+
+
+const express = require('express');
+const app = express();
+
+app.get('/', (req, res) => {
+    res.send('Hello from Jenkins CI/CD Pipeline Deployment!');
+});
+
+const PORT = 3000;
+app.listen(PORT, () => {
+    console.log(`App running on port ${PORT}`);
+});
+package.json
+{
+  "name": "webapp-ci-cd",
+  "version": "1.0.0",
+  "description": "CI/CD pipeline project",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
+
+
+4. Step 2 – Push Code to GitHub
+
+
+
+Initialize Git
+git init
+git add .
+git commit -m "Initial commit"
+Create GitHub Repo
+
+Example:
+
+https://github.com/yourusername/webapp-ci-cd.git
+Push to GitHub
+git remote add origin https://github.com/yourusername/webapp-ci-cd.git
+git branch -M main
+git push -u origin main
+5. Step 3 – Modify Code and Commit Changes
+
+Modify:
+
+res.send('Updated CI/CD App deployed successfully!');
+
+Then:
+
+git add .
+git commit -m "Updated home page message"
+git push origin main
+
+This shows Continuous Integration.
+
+
+
+6. Step 4 – Create Dockerfile
+Dockerfile
+
+
+FROM node:18
+
+WORKDIR /app
+
+COPY package*.json ./
+
+RUN npm install
+
+COPY . .
+
+EXPOSE 3000
+
+CMD ["npm", "start"]
+
+
+7. Step 5 – Push Docker Image to Docker Hub Manually First
+Build image
+docker build -t yourdockerhubusername/webapp-ci-cd .
+Login
+docker login
+Push
+docker push yourdockerhubusername/webapp-ci-cd
+
+
+8. Step 6 – Install and Configure Jenkins
+Install Jenkins
+
+Start Jenkins:
+
+brew services start jenkins-lts
+
+Open:
+
+http://localhost:8080
+
+Install Jenkins Plugins
+
+Install:
+
+Git plugin
+Pipeline plugin
+Docker Pipeline plugin
+Kubernetes CLI plugin
+Add Credentials in Jenkins
+
+Manage Jenkins → Credentials
+
+Add:
+
+GitHub credentials
+Username/password or token
+Docker Hub credentials
+
+ID:
+
+dockerhub-creds
+9. Step 7 – Jenkins Pipeline Job
+Create New Item
+New Item → Pipeline
+Name: webapp-pipeline
+Configure GitHub Repo
+
+Pipeline script from SCM:
+
+SCM → Git
+
+Repository URL:
+
+https://github.com/yourusername/webapp-ci-cd.git
+
+Branch:
+
+*/main
+
+Script Path:
+
+Jenkinsfile
+
+
+
+10. Step 8 – Jenkinsfile Pipeline Code
+Jenkinsfile
+pipeline {
+    agent any
+
+    environment {
+        DOCKER_IMAGE = "yourdockerhubusername/webapp-ci-cd"
+    }
+
+    stages {
+
+        stage('Checkout GitHub') {
+            steps {
+                git branch: 'main',
+                url: 'https://github.com/yourusername/webapp-ci-cd.git'
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                sh 'npm install'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh 'docker build -t $DOCKER_IMAGE .'
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh '''
+                    echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                    docker push $DOCKER_IMAGE
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                sh 'kubectl apply -f deployment.yaml'
+                sh 'kubectl apply -f service.yaml'
+            }
+        }
+    }
+}
+
+
+
+11. Step 9 – Create Kubernetes Cluster
+
+Use Minikube or Kind.
+
+Start Cluster
+minikube start
+
+Check:
+
+kubectl get nodes
+
+
+12. Step 10 – Kubernetes Deployment File
+deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webapp-deployment
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: webapp
+  template:
+    metadata:
+      labels:
+        app: webapp
+    spec:
+      containers:
+        - name: webapp
+          image: yourdockerhubusername/webapp-ci-cd
+          ports:
+            - containerPort: 3000
+
+
+
+13. Step 11 – Kubernetes Service File
+service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: webapp-service
+spec:
+  selector:
+    app: webapp
+  type: NodePort
+  ports:
+    - protocol: TCP
+      port: 3000
+      targetPort: 3000
+      nodePort: 30036
+
+
+14. Step 12 – Deploy Application
+
+Run:
+
+kubectl apply -f deployment.yaml
+kubectl apply -f service.yaml
+
+Check pods:
+
+kubectl get pods
+
+Check service:
+
+kubectl get svc
+
+
+
+15. Step 13 – Access Application in Browser
+
+If using Minikube:
+
+minikube service webapp-service
+
+Or:
+
+http://<node-ip>:30036
+
+Expected output:
+
+Updated CI/CD App deployed successfully!
+
+
+16. Pipeline Flow Summary
+
+Flow:
+
+VS Code
+   ↓
+GitHub Push
+   ↓
+Jenkins Trigger
+   ↓
+Git Checkout
+   ↓
+Install Dependencies
+   ↓
+Docker Build
+   ↓
+Docker Push
+   ↓
+Kubernetes Deploy
+   ↓
+NodePort Access
+
+
+17. Viva / Important Points
+Why Jenkins?
+
+Automates build, test, deploy.
+
+Why Docker?
+
+Packages application consistently.
+
+Why Kubernetes?
+
+Manages scaling and deployment.
+
+Why NodePort?
+
+Exposes service externally.
+
+What is CI?
+
+Automatic integration of code changes.
+
+What is CD?
+
+Automatic deployment after successful build.

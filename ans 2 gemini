@@ -1,0 +1,228 @@
+To ensure this works on the first try, we will use a Node.js application as the example. Below is the complete file structure and the code for every file required in your repository.
+
+Project File Structure
+Place these files in your root directory in Visual Studio:
+
+Plaintext
+/my-web-app
+├── app.js               # The web application logic
+├── package.json         # Node.js dependencies
+├── Dockerfile           # Instructions for Docker image
+├── k8s-deployment.yaml  # Kubernetes cluster configuration
+└── Jenkinsfile          # Jenkins Pipeline-as-Code
+1. The Web Application (app.js)
+This includes the requested Degree Certificate details so it shows up immediately upon deployment.
+
+JavaScript
+
+const express = require('express');
+const app = express();
+const PORT = 80;
+
+app.get('/', (req, res) => {
+    res.send(`
+        <div style="text-align: center; border: 10px double #555; padding: 50px; font-family: serif;">
+            <h1>STUDENT DEGREE CERTIFICATE</h1>
+            <p>This is to certify that the automation process was successful.</p>
+            <hr width="50%">
+            <h2>Affiliation Details</h2>
+            <p><b>University:</b> Your University Name</p>
+            <p><b>Department:</b> Computer Science & Engineering</p>
+            <p><b>Accreditation:</b> AICTE / UGC Affiliated</p>
+            <p><b>Status:</b> CI/CD Pipeline Deployment Verified</p>
+        </div>
+    `);
+});
+
+app.listen(PORT, () => {
+    console.log(`App running on port ${PORT}`);
+});
+
+
+
+2. Dependency File (package.json)
+
+JSON
+{
+  "name": "jenkins-k8s-app",
+  "version": "1.0.0",
+  "main": "app.js",
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "scripts": {
+    "start": "node app.js"
+  }
+}
+
+
+
+
+3. Docker Configuration (Dockerfile)
+This file tells Jenkins how to package your application.
+
+Dockerfile
+# Use lightweight Node image
+FROM node:18-alpine
+
+# Create app directory
+WORKDIR /usr/src/app
+
+# Install dependencies
+COPY package*.json ./
+RUN npm install
+
+# Bundle app source
+COPY . .
+
+# Expose port 80 and start
+EXPOSE 80
+CMD [ "node", "app.js" ]
+
+
+
+4. Kubernetes Configuration (k8s-deployment.yaml)
+This creates the Cluster and the NodePort to view the application.
+
+YAML
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app-deployment
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: certificate-app
+  template:
+    metadata:
+      labels:
+        app: certificate-app
+    spec:
+      containers:
+      - name: web-app
+        image: YOUR_DOCKERHUB_USERNAME/certificate-app:latest
+        ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-app-service
+spec:
+  type: NodePort
+  selector:
+    app: certificate-app
+  ports:
+    - port: 80
+      targetPort: 80
+      nodePort: 30007
+
+
+
+
+5. Jenkins Pipeline (Jenkinsfile)
+This automates the entire process. Copy this into the "Pipeline Script" section of your Jenkins job or keep it in the root folder.
+
+Groovy
+pipeline {
+    agent any
+
+    environment {
+        // Change these to your actual DockerHub username
+        DOCKER_HUB_USER = 'your-dockerhub-username'
+        IMAGE_NAME = 'certificate-app'
+    }
+
+    stages {
+        stage('Checkout GITHUB') {
+            steps {
+                // Jenkins will automatically checkout if configured via 'Pipeline from SCM'
+                // Otherwise, use: checkout scm
+                git 'https://github.com/YOUR_GITHUB_USER/YOUR_REPO.git'
+            }
+        }
+
+        stage('Create Docker image') {
+            steps {
+                sh "docker build -t ${DOCKER_HUB_USER}/${IMAGE_NAME}:latest ."
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                // Ensure you created 'docker-hub-creds' in Jenkins -> Manage Jenkins -> Credentials
+                withCredentials([usernamePassword(credentialsId: 'docker-hub-creds', passwordVariable: 'PASS', usernameVariable: 'USER')]) {
+                    sh "echo \$PASS | docker login -u \$USER --password-stdin"
+                    sh "docker push ${DOCKER_HUB_USER}/${IMAGE_NAME}:latest"
+                }
+            }
+        }
+
+        stage('Create Cluster in Kubernetes') {
+            steps {
+                // Ensure 'kubeconfig' is added to Jenkins Credentials as a 'Secret File'
+                withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
+                    sh "kubectl --kubeconfig=\$KUBECONFIG apply -f k8s-deployment.yaml"
+                    sh "kubectl --kubeconfig=\$KUBECONFIG rollout restart deployment/web-app-deployment"
+                }
+            }
+        }
+    }
+}
+Deployment Flow Diagram
+How to run this "First Try":
+GitHub: Create a repo and push all these files.
+
+Docker Hub: Create a public repository named certificate-app.
+
+Jenkins Credentials:
+
+Add Username with Password for Docker Hub (ID: docker-hub-creds).
+
+Add Secret File for your Kubernetes config (ID: kubeconfig).
+
+Jenkins Job: Create a "Pipeline" job, point it to your GitHub URL, and click Build Now.
+
+View Results: Go to http://<Your-Node-IP>:30007 to see your certificate.
+
+
+
+3. Create and Run the Pipeline Job
+
+
+This is where the automation comes to life.
+
+On the Jenkins Dashboard, click New Item.
+
+Enter name: Certificate-Deployment and select Pipeline, then click OK.
+
+Scroll down to the Pipeline section:
+
+Definition: Pipeline script from SCM
+
+SCM: Git
+
+Repositories: Paste your GitHub Repo URL
+
+Branch: */main (or */master)
+
+Click Save.
+
+Click Build Now.
+
+4. Verification (The Final Result)
+
+Once the pipeline finishes (all stages turn green), you need to prove the application is live.
+
+Check the Cluster: In your terminal, run:
+
+Bash
+kubectl get pods
+kubectl get services
+Ensure web-app-service shows port 80:30007/TCP.
+
+Access the App: Open your browser and type:
+http://<YOUR_KUBERNETES_NODE_IP>:30007
+
+Note: If you are using Minikube, run minikube ip to get the IP. If you are on a cloud provider (AWS/Azure), ensure port 30007 is open in your Security Groups/Firewall.
